@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Qualidade e testes (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Instalação reproduzível (npm ci)
+        run: npm ci
+
+      - name: Verificação de formatação (Prettier)
+        run: npm run format:check
+
+      - name: Análise estática (ESLint)
+        run: npm run lint
+
+      - name: Testes automatizados (node:test)
+        run: npm test
+
+      - name: Auditoria de dependências (npm audit)
+        run: npm audit --audit-level=high
+
+      - name: Smoke test
+        run: npm run test:smoke
+
+  docker:
+    name: Build e teste da imagem Docker
+    needs: quality
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: lab40:feature25-${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (para o smoke test contra o container)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build da imagem (tag com SHA)
+        run: docker build --pull -t "$IMAGE" .
+
+      - name: Executar container efêmero
+        run: docker run -d --name lab40-ci -p 3000:3000 "$IMAGE"
+
+      - name: Validar /health e endpoint da feature 25 no container
+        run: |
+          BASE_URL=http://localhost:3000 node scripts/smoke.js
+          curl --fail -s http://localhost:3000/health
+          curl --fail -s -X POST http://localhost:3000/api/features/25 \
+            -H "Content-Type: application/json" -d '{"ano":2024}'
+
+      - name: Logs do container (em caso de falha)
+        if: failure()
+        run: docker logs lab40-ci || true
+
+      - name: Encerrar container
+        if: always()
+        run: docker rm -f lab40-ci || true
+
+      - name: Exportar imagem (.tar)
+        run: docker save "$IMAGE" -o lab40-feature25.tar
+
+      - name: Armazenar imagem como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab40-image-${{ github.sha }}
+          path: lab40-feature25.tar
+          retention-days: 7
