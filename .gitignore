@@ -1,0 +1,17 @@
+# Dependências
+node_modules/
+
+# Variáveis de ambiente e segredos
+.env
+.env.*
+
+# Logs, cobertura e artefatos locais
+*.log
+coverage/
+test-results/
+*.tar
+deployment-record.txt
+
+# Sistema/editor
+.DS_Store
+.vscode/
