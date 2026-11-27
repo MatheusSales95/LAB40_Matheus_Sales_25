@@ -1,0 +1,7 @@
+# Arquivos do template base: não reformatar (contrato proíbe alterar app.js, server.js, public/ e módulos de outros estudantes)
+node_modules/
+public/
+src/app.js
+src/server.js
+src/features/index.js
+package-lock.json
